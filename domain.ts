@@ -331,8 +331,9 @@ export class DomainValidationStack extends DeploymentStack {
             });
         }
 
-        // Backfilling only required in NA region. TODO : Remove these resources once backfilling is not required
-        if(domainValidationStackProps.realm == 'USAmazon') {
+        // Backfilling only required in NA & EU region. TODO : Remove these resources once backfilling is not required
+        if(domainValidationStackProps.localResourceNameSuffix == "" &&
+            (domainValidationStackProps.realm == 'USAmazon' || domainValidationStackProps.realm == 'EUAmazon')) {
 
             // create a role for this lambda and add code to also assume IAM role of other account for DDB access
             let backfillLambda = new lambda.Function(this, 'BackfillLambda' , {
