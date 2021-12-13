@@ -2,7 +2,7 @@ import {BrazilPackage, DeploymentStack, DeploymentStackProps, LambdaAsset} from 
 import * as cdk from "monocdk";
 import {App, CfnMapping, Construct, Duration, Fn} from "monocdk";
 import * as lambda from "monocdk/aws-lambda";
-import {Alias, AliasOptions, IFunction} from "monocdk/aws-lambda";
+import {IFunction} from "monocdk/aws-lambda";
 import * as log from 'monocdk/aws-logs';
 import {LogGroup, RetentionDays} from 'monocdk/aws-logs';
 import {ArnPrincipal, AccountPrincipal, Effect, ManagedPolicy, PolicyStatement, Role, ServicePrincipal} from "monocdk/aws-iam";
@@ -191,25 +191,6 @@ export class DomainValidationStack extends DeploymentStack {
         let executeVendorResponseWorkflowErrorQueuePollerFunction = this.createLambda(DomainValidationStack.resourceName(errorQueuePollerName(executeVendorResponseWorkflow),
             domainValidationStackProps.localResourceNameSuffix), lambdaRole, domainValidationStackProps, '');
 
-        let executeVendorResponseWorkflowFunctionAliasOptions: AliasOptions | undefined
-        let processVendorResponseFunctionAliasOptions: AliasOptions | undefined
-
-        // ToDo: Revisit these values once we have more more data on monitoring scan results.
-        // For now setting Provisioned concurrency 30 for executeVendorResponseWorkflowFunction and 50 for processVendorResponseFunction in prod-NA and prod-EU
-        if(domainValidationStackProps.stage === 'prod-NA' || domainValidationStackProps.stage === 'prod-EU') {
-            executeVendorResponseWorkflowFunctionAliasOptions = {
-                provisionedConcurrentExecutions : 30
-            }
-            processVendorResponseFunctionAliasOptions = {
-                provisionedConcurrentExecutions : 50
-            }
-        }
-
-        let executeVendorResponseWorkflowFunctionAlias = executeVendorResponseWorkflowFunction.currentVersion.addAlias("live",
-            executeVendorResponseWorkflowFunctionAliasOptions);
-        let processVendorResponseFunctionAlias = processVendorResponseFunction.currentVersion.addAlias("live",
-            processVendorResponseFunctionAliasOptions);
-
         let lambdafunctionsForAPIGateway: Map<string, LambdaMetadata> = new Map<string, LambdaMetadata>();
 
         for (let [funcName, funcMeta] of lambdaFunctions) {
@@ -244,8 +225,7 @@ export class DomainValidationStack extends DeploymentStack {
         // SIM: https://sim.amazon.com/issues/D27201069
         this.createAPIGateway(idPrefix, lambdafunctionsForAPIGateway, domainValidationStackProps.localResourceNameSuffix);
         this.createSQS(DomainValidationStack.resourceName(executeVendorResponseWorkflow,
-            domainValidationStackProps.localResourceNameSuffix),executeVendorResponseWorkflowFunction,
-            executeVendorResponseWorkflowFunctionAlias, domainValidationStackProps);
+            domainValidationStackProps.localResourceNameSuffix), executeVendorResponseWorkflowFunction, domainValidationStackProps);
         this.createS3(getBucketName(vendorResponseBucketName, domainValidationStackProps.stage,
             domainValidationStackProps.localResourceNameSuffix), domainValidationStackProps.stage);
         this.createS3(getBucketName(evercBackfillBucketName, domainValidationStackProps.stage,
@@ -263,7 +243,7 @@ export class DomainValidationStack extends DeploymentStack {
                 autoLightWeight: workflowType.autoLightWeight,
                 upfrontUrlValidationLambda: upfrontURLValidationFunction,
                 initiateVendorReviewLambda: initiateVendorReviewFunction,
-                processVendorResponseLambda: processVendorResponseFunctionAlias,
+                processVendorResponseLambda: processVendorResponseFunction,
                 initiateManualReviewLambda: initiateManualReviewFunction,
                 processManualResponseLambda: processManualResponseFunction,
                 domainDDB: ddbDomainValidationTable,
@@ -549,7 +529,7 @@ export class DomainValidationStack extends DeploymentStack {
         //TODO: Add other handlers and respective resource permission after completing code changes in the Lambda package.
         let lambdaFunc = new lambda.Function(this, DomainValidation + lambdaName, {
             functionName: lambdaName,
-            description: `${lambdaName} function generated on: ${new Date().toISOString()}`,
+            description: "TODO", //TODO: Update summary once lambda code is completed.
             runtime: lambda.Runtime.JAVA_11,
             handler: getHandler(handlerFuncName),
             code: LambdaAsset.fromBrazil({
@@ -777,7 +757,7 @@ export class DomainValidationStack extends DeploymentStack {
     }
 
 
-    private createSQS(lambdaName: string, lambdaFunc: lambda.Function, alias: Alias,
+    private createSQS(lambdaName: string, lambdaFunc: lambda.Function,
                       domainValidationProps: DomainValidationStackProps) {
         let queueName: string;
         let queue: Queue;
@@ -822,10 +802,10 @@ export class DomainValidationStack extends DeploymentStack {
                 visibilityTimeout: Duration.seconds(60)
             });
 
-            alias.addEventSource(new SqsEventSource(queue, {
+            lambdaFunc.addEventSource(new SqsEventSource(queue, {
                 batchSize: 1
             }));
-            queue.grantConsumeMessages(alias);
+            queue.grantConsumeMessages(lambdaFunc);
             const errorQueueUrl = getQueueUrl(domainValidationProps.region,
                 domainValidationProps.accountId, queueName + errorSuffix);
             lambdaFunc.addEnvironment(vendorResponseValidationErrorQueueUrl, errorQueueUrl);
